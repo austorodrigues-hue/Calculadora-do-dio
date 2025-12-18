@@ -8,41 +8,156 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0f172a;
-            margin: 0;
-            overflow-x: hidden;
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; margin: 0; color: white; }
         .font-mono { font-family: 'Fira+Code', monospace; }
-        .glass {
-            background: rgba(30, 41, 59, 0.7);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .calc-button {
-            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-            user-select: none;
-        }
-        .calc-button:active { transform: scale(0.92); }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .calc-button { transition: all 0.1s ease; user-select: none; cursor: pointer; }
+        .calc-button:active { transform: scale(0.95); opacity: 0.8; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
     </style>
-    <script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@19.0.0",
-    "react-dom": "https://esm.sh/react-dom@19.0.0",
-    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/"
-  }
-}
-</script>
 </head>
 <body>
     <div id="root"></div>
-    <script type="module" src="./index.tsx"></script>
+
+    <script type="module">
+        import { h, Component, render } from 'https://esm.sh/preact';
+        import { useState, useEffect, useCallback } from 'https://esm.sh/preact/hooks';
+        import htm from 'https://esm.sh/htm';
+
+        const html = htm.bind(h);
+
+        // --- Componentes ---
+        const CalcButton = ({ label, onClick, variant = 'number', className = '' }) => {
+            const variants = {
+                number: "bg-slate-800 text-slate-100 hover:bg-slate-700",
+                operator: "bg-indigo-600 text-white hover:bg-indigo-500",
+                action: "bg-slate-700 text-amber-400 hover:bg-slate-600",
+                scientific: "bg-slate-900 text-indigo-400 hover:bg-slate-800 text-sm"
+            };
+            return html`
+                <button onClick=${onClick} className="calc-button h-14 md:h-16 rounded-2xl font-semibold text-lg flex items-center justify-center shadow-sm ${variants[variant]} ${className}">
+                    ${label}
+                </button>
+            `;
+        };
+
+        const App = () => {
+            const [expression, setExpression] = useState('');
+            const [result, setResult] = useState('');
+            const [history, setHistory] = useState([]);
+            const [mode, setMode] = useState('basic');
+
+            useEffect(() => {
+                const saved = localStorage.getItem('novacalc_v3');
+                if (saved) setHistory(JSON.parse(saved));
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('novacalc_v3', JSON.stringify(history));
+            }, [history]);
+
+            const handleInput = (val) => setExpression(prev => prev + val);
+            const handleClear = () => { setExpression(''); setResult(''); };
+            const handleDelete = () => setExpression(prev => prev.slice(0, -1));
+
+            const calculate = useCallback(() => {
+                if (!expression) return;
+                try {
+                    let sanitized = expression
+                        .replace(/×/g, '*').replace(/÷/g, '/')
+                        .replace(/π/g, 'Math.PI').replace(/e/g, 'Math.E')
+                        .replace(/sin\(/g, 'Math.sin(').replace(/cos\(/g, 'Math.cos(')
+                        .replace(/tan\(/g, 'Math.tan(').replace(/log\(/g, 'Math.log10(')
+                        .replace(/ln\(/g, 'Math.log(').replace(/√\(/g, 'Math.sqrt(')
+                        .replace(/\^/g, '**');
+
+                    const res = eval(sanitized);
+                    const resStr = Number.isInteger(res) ? res.toString() : parseFloat(res.toFixed(8)).toString();
+                    setResult(resStr);
+                    
+                    const newItem = { id: Date.now(), expression, result: resStr };
+                    setHistory(prev => [newItem, ...prev].slice(0, 20));
+                } catch (e) { setResult('Erro'); }
+            }, [expression]);
+
+            return html`
+                <div className="min-h-screen p-4 md:p-8 flex flex-col items-center justify-center">
+                    <div className="w-full max-w-5xl flex flex-col lg:flex-row gap-8">
+                        
+                        <!-- Calculadora -->
+                        <div className="flex-1 max-w-md mx-auto lg:mx-0">
+                            <div className="flex justify-between items-center mb-6">
+                                <h1 className="text-2xl font-bold flex items-center gap-2">
+                                    <span className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg">N</span>
+                                    NovaCalc Pro
+                                </h1>
+                                <div className="flex bg-slate-800 rounded-xl p-1 border border-white/5">
+                                    <button onClick=${() => setMode('basic')} className="px-4 py-1.5 rounded-lg text-sm font-bold ${mode === 'basic' ? 'bg-indigo-600' : 'text-slate-400'}">Básico</button>
+                                    <button onClick=${() => setMode('scientific')} className="px-4 py-1.5 rounded-lg text-sm font-bold ${mode === 'scientific' ? 'bg-indigo-600' : 'text-slate-400'}">Científico</button>
+                                </div>
+                            </div>
+
+                            <div className="glass rounded-3xl p-6 mb-4 flex flex-col items-end justify-end min-h-[140px]">
+                                <div className="text-slate-400 text-lg font-mono mb-2 truncate w-full text-right">${expression || ' '}</div>
+                                <div className="text-white text-4xl md:text-5xl font-bold font-mono truncate w-full text-right">${result || '0'}</div>
+                            </div>
+
+                            <div className="grid grid-cols-4 gap-3">
+                                ${mode === 'scientific' && html`
+                                    <${CalcButton} label="sin" onClick=${() => handleInput('sin(')} variant="scientific" />
+                                    <${CalcButton} label="cos" onClick=${() => handleInput('cos(')} variant="scientific" />
+                                    <${CalcButton} label="√" onClick=${() => handleInput('√(')} variant="scientific" />
+                                    <${CalcButton} label="^" onClick=${() => handleInput('^')} variant="scientific" />
+                                `}
+                                <${CalcButton} label="C" onClick=${handleClear} variant="action" />
+                                <${CalcButton} label="(" onClick=${() => handleInput('(')} variant="action" />
+                                <${CalcButton} label=")" onClick=${() => handleInput(')')} variant="action" />
+                                <${CalcButton} label="÷" onClick=${() => handleInput('÷')} variant="operator" />
+                                
+                                <${CalcButton} label="7" onClick=${() => handleInput('7')} />
+                                <${CalcButton} label="8" onClick=${() => handleInput('8')} />
+                                <${CalcButton} label="9" onClick=${() => handleInput('9')} />
+                                <${CalcButton} label="×" onClick=${() => handleInput('×')} variant="operator" />
+                                
+                                <${CalcButton} label="4" onClick=${() => handleInput('4')} />
+                                <${CalcButton} label="5" onClick=${() => handleInput('5')} />
+                                <${CalcButton} label="6" onClick=${() => handleInput('6')} />
+                                <${CalcButton} label="-" onClick=${() => handleInput('-')} variant="operator" />
+                                
+                                <${CalcButton} label="1" onClick=${() => handleInput('1')} />
+                                <${CalcButton} label="2" onClick=${() => handleInput('2')} />
+                                <${CalcButton} label="3" onClick=${() => handleInput('3')} />
+                                <${CalcButton} label="+" onClick=${() => handleInput('+')} variant="operator" />
+                                
+                                <${CalcButton} label="0" onClick=${() => handleInput('0')} />
+                                <${CalcButton} label="." onClick=${() => handleInput('.')} />
+                                <${CalcButton} label="⌫" onClick=${handleDelete} variant="action" />
+                                <${CalcButton} label="=" onClick=${calculate} variant="operator" className="bg-emerald-600 hover:bg-emerald-500" />
+                            </div>
+                        </div>
+
+                        <!-- Histórico -->
+                        <div className="flex-1 lg:max-w-xs">
+                            <div className="glass rounded-[2rem] p-6 h-full min-h-[400px] flex flex-col">
+                                <h2 className="text-slate-400 font-bold mb-4 flex items-center gap-2">Histórico</h2>
+                                <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
+                                    ${history.length === 0 ? html`<p className="text-slate-600 italic text-sm text-center mt-10">Vazio</p>` : 
+                                    history.map(item => html`
+                                        <div key=${item.id} className="p-3 bg-slate-800/50 rounded-xl cursor-pointer hover:bg-slate-800" onClick=${() => { setExpression(item.expression); setResult(item.result); }}>
+                                            <div className="text-[10px] text-slate-500">${item.expression}</div>
+                                            <div className="text-sm font-bold">${item.result}</div>
+                                        </div>
+                                    `)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+
+        render(html`<${App} />`, document.getElementById('root'));
+    </script>
 </body>
 </html>
